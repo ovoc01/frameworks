@@ -1,4 +1,5 @@
 package etu2074.framework.servlet;
+import etu2074.framework.mapping.Mapping;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -6,13 +7,24 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Vector;
 
 @WebServlet(name = "*",value = "/*")
 public class FrontServlet extends HttpServlet {
     private HttpServletRequest httpServletRequest;
     private HttpServletResponse httpServletResponse;
+    private HashMap<String, Mapping> mappingUrl;
+
     public FrontServlet(){}
+
+    public HashMap<String, Mapping> getMappingUrl() {
+        return mappingUrl;
+    }
+
+    public void setMappingUrl(HashMap<String, Mapping> mappingUrl) {
+        this.mappingUrl = mappingUrl;
+    }
 
     public void setHttpServletRequest(HttpServletRequest httpServletRequest) {
         this.httpServletRequest = httpServletRequest;
