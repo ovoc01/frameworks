@@ -1,5 +1,7 @@
 package etu2074.framework.servlet;
+import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
+import etu2074.framework.url.Link;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -7,7 +9,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.Vector;
 
 @WebServlet(name = "*",value = "/*")
@@ -16,7 +20,9 @@ public class FrontServlet extends HttpServlet {
     private HttpServletResponse httpServletResponse;
     private HashMap<String, Mapping> mappingUrl;
 
-    public FrontServlet(){}
+    public FrontServlet(){
+
+    }
 
     public HashMap<String, Mapping> getMappingUrl() {
         return mappingUrl;
@@ -45,7 +51,20 @@ public class FrontServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-
+        mappingUrl = new HashMap<>();
+        retrieveAllMappedMethod(mappingUrl);
+    }
+    private void retrieveAllMappedMethod(HashMap<String, Mapping> mapping){
+        Set<Class> classSet = Loader.findAllClasses("controller");
+        for(Class classes:classSet){
+            Method[]methods = classes.getMethods();
+            for (Method method:methods) {
+                Link link = method.getAnnotation(Link.class);
+                if(link!=null){
+                    mappingUrl.put(link.url(),new Mapping(classes.getName(),method));
+                }
+            }
+        }
     }
     public final void dispatch(String URL) {
         try {
