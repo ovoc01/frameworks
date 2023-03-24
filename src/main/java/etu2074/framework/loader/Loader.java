@@ -1,19 +1,26 @@
 package etu2074.framework.loader;
 
 import java.io.*;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Loader {
-    public static Set<Class> findAllClasses(String packageName){
-        InputStream stream = ClassLoader.getSystemResourceAsStream(packageName.replaceAll("[.]","/"));
-        BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
-        return reader.lines()
-                .filter(line->line.endsWith(".class"))
-                .map(line ->getClass(line,packageName))
-                .collect(Collectors.toSet());
+    public static Set<Class> findAllClasses(String packageName) throws URISyntaxException, ClassNotFoundException {
+        System.out.println(packageName);
+        URL stream = Thread.currentThread().getContextClassLoader().getResource(packageName.replaceAll("[.]","/"));
+        File dir = new File(stream.toURI());
+        File[] files = dir.listFiles(file->file.getName().endsWith(".class"));
+        Set<Class>classes = new HashSet<>();
+        for (File file: files) {
+            System.out.println(file.getName());
+            String c = packageName+"."+file.getName().substring(0,file.getName().lastIndexOf("."));
+            classes.add(Class.forName(c));
+        }
+        return classes;
     }
 
     public static Set<Class> find_classes(String package_name) throws ClassCastException, ClassNotFoundException {
