@@ -2,6 +2,7 @@ package etu2074.framework.servlet;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
 import etu2074.framework.url.Link;
+import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -10,11 +11,10 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.Vector;
-
-@WebServlet(name = "*",value = "/*")
 public class FrontServlet extends HttpServlet {
     private HttpServletRequest httpServletRequest;
     private HttpServletResponse httpServletResponse;
@@ -50,12 +50,32 @@ public class FrontServlet extends HttpServlet {
 
 
     @Override
-    public void init() throws ServletException {
+    public void init(ServletConfig config) throws ServletException {
+        super.init(config);
+        String path = getInitParameter("path");
         mappingUrl = new HashMap<>();
-        retrieveAllMappedMethod(mappingUrl);
+        try {
+            retrieveAllMappedMethod(path);
+        } catch (URISyntaxException | ClassNotFoundException e) {
+            e.printStackTrace();
+        }
     }
-    private void retrieveAllMappedMethod(HashMap<String, Mapping> mapping){
-        Set<Class> classSet = Loader.findAllClasses("controller");
+    private void retrieveAllMappedMethod(String paths) throws URISyntaxException, ClassNotFoundException {
+        Set<Class> classSet = null;
+        classSet = Loader.findAllClasses("etu2074.framework.controller");;
+        for(Class classes:classSet){
+            Method[]methods = classes.getMethods();
+            for (Method method:methods) {
+                Link link = method.getAnnotation(Link.class);
+                if(link!=null){
+                    mappingUrl.put(link.url(),new Mapping(classes.getName(),method));
+                }
+            }
+        }
+    }
+    private void retrieveAllMappedMethod() throws URISyntaxException, ClassNotFoundException {
+        Set<Class> classSet = null;
+            classSet = Loader.findAllClasses("etu2074.framework.controller");;
         for(Class classes:classSet){
             Method[]methods = classes.getMethods();
             for (Method method:methods) {
@@ -110,5 +130,10 @@ public class FrontServlet extends HttpServlet {
             ur+=url;
         }
         return ur;
+    }
+
+    public static void main(String[] args) {
+       // Set<Class>classSet = Loader.findAllClasses("etu2074.framework.controller");
+        //System.out.println(classSet);
     }
 }
