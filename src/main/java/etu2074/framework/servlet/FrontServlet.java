@@ -1,4 +1,5 @@
 package etu2074.framework.servlet;
+import etu2074.framework.controller.Model_view;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
 import etu2074.framework.url.Link;
@@ -11,11 +12,14 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.Vector;
+
+
 public class FrontServlet extends HttpServlet {
     private HttpServletRequest httpServletRequest;
     private HttpServletResponse httpServletResponse;
@@ -24,7 +28,6 @@ public class FrontServlet extends HttpServlet {
     public FrontServlet(){
 
     }
-
     public HashMap<String, Mapping> getMappingUrl() {
         return mappingUrl;
     }
@@ -49,7 +52,6 @@ public class FrontServlet extends HttpServlet {
         this.httpServletResponse = httpServletResponse;
     }
 
-
     @Override
     public void init(ServletConfig servletConfig) throws ServletException {
         try{
@@ -62,6 +64,7 @@ public class FrontServlet extends HttpServlet {
             e.printStackTrace();
         }
     }
+
     private void retrieveAllMappedMethod(String paths) throws URISyntaxException, ClassNotFoundException {
         Set<Class> classSet = null;
         classSet = Loader.findAllClasses(paths);
@@ -70,7 +73,7 @@ public class FrontServlet extends HttpServlet {
             for (Method method:methods) {
                 Link link = method.getAnnotation(Link.class);
                 if(link!=null){
-                    mappingUrl.put(link.url(),new Mapping(classes.getName(),method));
+                    mappingUrl.put(link.url(),new Mapping(classes.getName(),method,classes));
                 }
             }
         }
@@ -83,7 +86,7 @@ public class FrontServlet extends HttpServlet {
             for (Method method:methods) {
                 Link link = method.getAnnotation(Link.class);
                 if(link!=null){
-                    mappingUrl.put(link.url(),new Mapping(classes.getName(),method));
+                    mappingUrl.put(link.url(),new Mapping(classes.getName(),method,classes));
                 }
             }
         }
@@ -102,15 +105,36 @@ public class FrontServlet extends HttpServlet {
         Vector<String> stringVector = retrieveRequestUrl(request);
         PrintWriter writer = response.getWriter();
         try{
+            System.out.println("===>url"+retrieveRequestUrl(request));
             String values = request.getRequestURI();
             writer.println(values);
             writer.println("<br>");
             HashMap<String,Mapping> list = getMappingUrl();
             writer.println(list);
+            Model_view modelView = redirection(request);
+            if(modelView!=null){
+                dispatch(modelView.getView());
+            }
+            redirection(request);
         }catch (Exception e){
             e.printStackTrace();
         }
     }
+
+    private Model_view redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+        Vector<String> links = retrieveRequestUrl(request);
+        if(!links.isEmpty()){
+            Mapping objectMapping = mappingUrl.get(links.get(0));
+            if(objectMapping!=null){
+                Object temp = objectMapping.getaClass().newInstance();
+                Model_view model_view= (Model_view) temp.getClass().getMethod(objectMapping.getMethod().getName()).invoke(temp);
+                return model_view;
+            }
+        }
+        return null;
+    }
+
+
 
     @Override
     public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException,ServletException{
