@@ -8,7 +8,12 @@
       </options>
     </properties>
     <root id="archive" name="frameworks-1.0-SNAPSHOT.war">
-      <element id="artifact" artifact-name="frameworks:war exploded" />
+      <element id="directory" name="WEB-INF">
+        <element id="directory" name="lib">
+          <element id="artifact" artifact-name="frameworks:jar2" />
+        </element>
+      </element>
+      <element id="javaee-facet-resources" facet="frameworks/web/Web" />
     </root>
   </artifact>
 </component>

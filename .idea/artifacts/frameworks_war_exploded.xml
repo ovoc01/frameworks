@@ -13,6 +13,10 @@
         <element id="directory" name="classes">
           <element id="module-output" name="frameworks" />
         </element>
+        <element id="directory" name="lib">
+          <element id="artifact" artifact-name="frameworks:jar2" />
+          <element id="file-copy" path="$PROJECT_DIR$/out/artifacts/frameworks_jar2/frameworks.jar" />
+        </element>
       </element>
       <element id="directory" name="META-INF">
         <element id="file-copy" path="$PROJECT_DIR$/target/frameworks-1.0-SNAPSHOT/META-INF/MANIFEST.MF" />

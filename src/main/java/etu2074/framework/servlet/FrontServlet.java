@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.util.HashMap;
@@ -50,19 +51,20 @@ public class FrontServlet extends HttpServlet {
 
 
     @Override
-    public void init(ServletConfig config) throws ServletException {
-        super.init(config);
-        String path = getInitParameter("path");
-        mappingUrl = new HashMap<>();
-        try {
+    public void init(ServletConfig servletConfig) throws ServletException {
+        try{
+            super.init(servletConfig);
+            String path = getInitParameter("pathos");
+            mappingUrl = new HashMap<>();
             retrieveAllMappedMethod(path);
-        } catch (URISyntaxException | ClassNotFoundException e) {
+
+        }catch (Exception e){
             e.printStackTrace();
         }
     }
     private void retrieveAllMappedMethod(String paths) throws URISyntaxException, ClassNotFoundException {
         Set<Class> classSet = null;
-        classSet = Loader.findAllClasses("etu2074.framework.controller");;
+        classSet = Loader.findAllClasses(paths);
         for(Class classes:classSet){
             Method[]methods = classes.getMethods();
             for (Method method:methods) {
@@ -75,7 +77,7 @@ public class FrontServlet extends HttpServlet {
     }
     private void retrieveAllMappedMethod() throws URISyntaxException, ClassNotFoundException {
         Set<Class> classSet = null;
-            classSet = Loader.findAllClasses("etu2074.framework.controller");;
+        classSet = Loader.findAllClasses("etu2074.framework.controller");
         for(Class classes:classSet){
             Method[]methods = classes.getMethods();
             for (Method method:methods) {
@@ -86,6 +88,7 @@ public class FrontServlet extends HttpServlet {
             }
         }
     }
+
     public final void dispatch(String URL) {
         try {
             getHttpServletRequest().getRequestDispatcher(URL).forward(getHttpServletRequest(),getHttpServletResponse());
@@ -94,10 +97,19 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
-
     public void processRequest(HttpServletRequest request,HttpServletResponse response) throws IOException,ServletException{
         setHttpServletRequest(request);setHttpServletResponse(response);
         Vector<String> stringVector = retrieveRequestUrl(request);
+        PrintWriter writer = response.getWriter();
+        try{
+            String values = request.getRequestURI();
+            writer.println(values);
+            writer.println("<br>");
+            HashMap<String,Mapping> list = getMappingUrl();
+            writer.println(list);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -133,7 +145,7 @@ public class FrontServlet extends HttpServlet {
     }
 
     public static void main(String[] args) {
-       // Set<Class>classSet = Loader.findAllClasses("etu2074.framework.controller");
+        // Set<Class>classSet = Loader.findAllClasses("etu2074.framework.controller");
         //System.out.println(classSet);
     }
 }

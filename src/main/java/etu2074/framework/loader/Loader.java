@@ -10,13 +10,13 @@ import java.util.stream.Collectors;
 
 public class Loader {
     public static Set<Class> findAllClasses(String packageName) throws URISyntaxException, ClassNotFoundException {
-        System.out.println(packageName);
+        //System.out.println(packageName);
         URL stream = Thread.currentThread().getContextClassLoader().getResource(packageName.replaceAll("[.]","/"));
         File dir = new File(stream.toURI());
         File[] files = dir.listFiles(file->file.getName().endsWith(".class"));
         Set<Class>classes = new HashSet<>();
         for (File file: files) {
-            System.out.println(file.getName());
+            //System.out.println(file.getName());
             String c = packageName+"."+file.getName().substring(0,file.getName().lastIndexOf("."));
             classes.add(Class.forName(c));
         }
