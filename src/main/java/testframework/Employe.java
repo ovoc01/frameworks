@@ -10,8 +10,4 @@ public class Employe {
         System.out.println("nety");
         return new Model_view("index.jsp");
     }
-
-    public static <T> T dynamicCast(Object obj, Class<T> cls) {
-        return cls.cast(obj);
-    }
 }

@@ -5,6 +5,7 @@ import etu2074.framework.mapping.Mapping;
 import etu2074.framework.url.Link;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,6 +16,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 
@@ -90,7 +92,6 @@ public class FrontServlet extends HttpServlet {
             }
         }
     }
-
     public final void dispatch(String URL) {
         try {
             getHttpServletRequest().getRequestDispatcher(URL).forward(getHttpServletRequest(),getHttpServletResponse());
@@ -99,7 +100,7 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
-    public void processRequest(HttpServletRequest request,HttpServletResponse response) throws IOException,ServletException{
+    public final void processRequest(HttpServletRequest request,HttpServletResponse response) throws IOException,ServletException{
         setHttpServletRequest(request);setHttpServletResponse(response);
         Vector<String> stringVector = retrieveRequestUrl(request);
         PrintWriter writer = response.getWriter();
@@ -112,6 +113,7 @@ public class FrontServlet extends HttpServlet {
             writer.println(list);
             Model_view modelView = redirection(request);
             if(modelView!=null){
+                if(!modelView.getData().isEmpty()) addDataToRequest(modelView.getData());
                 dispatch(modelView.getView());
             }
             redirection(request);
@@ -120,6 +122,12 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
+    private void addDataToRequest(HashMap<String,Object>data)
+    {
+        for (Map.Entry<String,Object>value:data.entrySet()){
+            getHttpServletRequest().setAttribute(value.getKey(), value.getValue());
+        }
+    }
     private Model_view redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
         Vector<String> links = retrieveRequestUrl(request);
         if(!links.isEmpty()){
@@ -133,8 +141,6 @@ public class FrontServlet extends HttpServlet {
         return null;
     }
 
-
-
     @Override
     public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException,ServletException{
         processRequest(request,response);
@@ -145,7 +151,7 @@ public class FrontServlet extends HttpServlet {
         processRequest(request,response);
     }
 
-    private Vector<String>retrieveRequestUrl(HttpServletRequest request){
+    private  Vector<String>retrieveRequestUrl(HttpServletRequest request){
         String requestURI = request.getRequestURI();
         String [] linkURI=requestURI.split("/");
         Vector<String> stringVector = new Vector<>();
@@ -158,7 +164,7 @@ public class FrontServlet extends HttpServlet {
     }
 
 
-    private String requestURL(HttpServletRequest request){
+    private  String requestURL(HttpServletRequest request){
         Vector<String> requestURL = retrieveRequestUrl(request);
         String ur = "";
         for (String url:requestURL) {
@@ -168,7 +174,7 @@ public class FrontServlet extends HttpServlet {
     }
 
     public static void main(String[] args) {
-        // Set<Class>classSet = Loader.findAllClasses("etu2074.framework.controller");
+        //Set<Class>classSet = Loader.findAllClasses("etu2074.framework.controller");
         //System.out.println(classSet);
     }
 }
