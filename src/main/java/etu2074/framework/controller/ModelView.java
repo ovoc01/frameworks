@@ -2,7 +2,7 @@ package etu2074.framework.controller;
 
 import java.util.HashMap;
 
-public class Model_view {
+public class ModelView {
     String view;
     private HashMap<String,Object> data = new HashMap<>();
 
@@ -25,11 +25,11 @@ public class Model_view {
         this.view = view;
     }
 
-    public Model_view(String view){
+    public ModelView(String view){
         setView(view);
     }
 
-    public Model_view(){
+    public ModelView(){
 
     }
 }
