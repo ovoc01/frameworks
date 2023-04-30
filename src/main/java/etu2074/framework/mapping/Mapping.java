@@ -30,11 +30,11 @@ public class Mapping {
     public void setClass_name(String class_name) {
         this.class_name = class_name;
     }
-    public Mapping(String class_name,Method method){
+    public Mapping(String class_name, Method method){
         setClass_name(class_name);
         setMethod(method);
     }
-    public Mapping(String class_name,Method method, Class<?> c){
+    public Mapping(String class_name, Method method, Class<?> c){
         setMethod(method);
         setaClass(c);
         setClass_name(class_name);

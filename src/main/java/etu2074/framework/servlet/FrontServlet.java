@@ -1,24 +1,24 @@
 package etu2074.framework.servlet;
-import etu2074.framework.controller.Model_view;
+import etu2074.framework.url.RequestParameter;
+import etu2074.framework.controller.ModelView;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
 import etu2074.framework.url.Link;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.annotation.WebServlet;
+import com.ovoc01.dao.utilities.Utilities;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.net.URISyntaxException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.Vector;
+import java.util.*;
 
 
 public class FrontServlet extends HttpServlet {
@@ -111,34 +111,153 @@ public class FrontServlet extends HttpServlet {
             writer.println("<br>");
             HashMap<String,Mapping> list = getMappingUrl();
             writer.println(list);
-            Model_view modelView = redirection(request);
+            ModelView modelView = redirection(request);
             if(modelView!=null){
                 if(!modelView.getData().isEmpty()) addDataToRequest(modelView.getData());
                 dispatch(modelView.getView());
             }
-            redirection(request);
+            //redirection(request);
         }catch (Exception e){
             e.printStackTrace();
         }
     }
 
+    private void instantiateObjectParameter(Map<String,String[]>requestParameter,Object object) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        Field[] fields = object.getClass().getDeclaredFields();//maka ny attribut rehetra declarer ao @ ilay objet
+        Method[] methods = object.getClass().getDeclaredMethods();
+        for (Field field:fields) {
+            String [] parameter = requestParameter.get(field.getName());
+            if(parameter!=null){
+                String setter = Utilities.createSetter(field.getName());
+                Method method_setter = stringMatchingMethod(methods,setter);
+                Class<?>[]method_parameter = arrayMethodParameter(method_setter);
+                method_setter.invoke(object,dynamicCast(method_parameter,parameter));
+            }
+        }
+    }
+
+    /**
+     * function who dynamically cast an Object with the matching classes
+     * @param classes
+     * @param args
+     * @return Object array
+     */
+
+    private Object [] dynamicCast(Class<?>[]classes,Object[]args){
+        Object[] array = new Object[classes.length];
+        int i = 0;
+        for (Class<?> cl:classes) {
+            System.out.println(args.getClass());
+            array[i] = cl.cast(args[i]);
+            i++;
+        }
+        return array;
+    }
+    private Method stringMatchingMethod(Method[] methods,String method_name){
+        Method matchingMethod = null;
+        for (Method method:methods) {
+            if(method.getName().equals(method_name)){
+                //System.out.println(method.getName());
+                return method;
+            }
+        }
+        return null;
+    }
+
+    private   Class<?>[] arrayMethodParameter(Method method) {
+        // Get the parameters of the method
+        Parameter[] parameters = method.getParameters();
+        // Create an array to store the classes of the parameter instances
+        Class<?>[] paramClasses = new Class<?>[parameters.length];
+        // Iterate through the parameters and get their classes
+        for (int i = 0; i < parameters.length; i++) {
+            paramClasses[i] = parameters[i].getType();
+            //System.out.println(parameters[i].getType());
+        }
+        // Return the array of parameter classes
+        return paramClasses;
+    }
     private void addDataToRequest(HashMap<String,Object>data)
     {
         for (Map.Entry<String,Object>value:data.entrySet()){
             getHttpServletRequest().setAttribute(value.getKey(), value.getValue());
         }
     }
-    private Model_view redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+
+    private ModelView redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
         Vector<String> links = retrieveRequestUrl(request);
+        Map<String,String[]> requestParameter = request.getParameterMap();
         if(!links.isEmpty()){
             Mapping objectMapping = mappingUrl.get(links.get(0));
             if(objectMapping!=null){
                 Object temp = objectMapping.getaClass().newInstance();
-                Model_view model_view= (Model_view) temp.getClass().getMethod(objectMapping.getMethod().getName()).invoke(temp);
-                return model_view;
+                instantiateObjectParameter(requestParameter,temp);
+                Method calledMethod = objectMapping.getMethod();
+                System.out.println(calledMethod);
+                //ModelView model_view= (ModelView) calledMethod.invoke(temp);
+                ModelView modelView = invokeMethod(calledMethod,temp,requestParameter);
+                return modelView;
             }
         }
         return null;
+    }
+
+    private ModelView invokeMethod(Method method,Object object,Map<String,String[]> requestParameter) throws InvocationTargetException, IllegalAccessException {
+        Vector<Parameter> parameters =  annotedMethodParameters(method);//maka ny parametre rehetra anle fonction
+        ModelView modelView = (ModelView) method.invoke(object);
+        System.out.println(parameters);
+        if(!parameters.isEmpty()){
+            //  System.out.println("1");
+            Class<?>[] parameterClasses = parametersClass(parameters);//maka ny class anle parametre
+            //System.out.println("2");
+            Object[] parameterValue = requestParamAttr(parameters,requestParameter);
+            //System.out.println("3");
+            modelView = (ModelView) method.invoke(object,dynamicCast(parameterClasses,parameterValue));//
+            //System.out.println("4");
+            System.out.println(modelView);
+        }
+        return modelView;
+    }
+
+    private Object[] requestParamAttr(Vector<Parameter> parameterVector,Map<String,String[]> requestParameter){
+        Vector<Object> objectVector =  new Vector<>();
+        for (Parameter params: parameterVector) {
+            String[] val = requestParameter.get(params.getAnnotation(RequestParameter.class).name());//maka an'ilay anle valeur anle
+            //System.out.println(val[0]);
+            objectVector.add(val[0]);// atao anaty anilay Vector daoly na null na tsy null
+        }
+        return objectVector.toArray(new Object[0]);
+    }
+
+
+    private Vector<Parameter> annotedMethodParameters(Method method)
+    {
+        Vector<Parameter> parameterVector = new Vector<>();
+        for (Parameter params:method.getParameters()) {
+            if(params.isAnnotationPresent(RequestParameter.class)) parameterVector.add(params);//maka ny parametre rehetra ka annoté oueh @RequestParameter
+        }
+        return  parameterVector;
+    }
+
+    private Class<?>[] parametersClass(Vector<Parameter> parameters){
+        if(parameters.isEmpty()) return null;
+        Class<?>[] classes = new Class[parameters.size()];
+        int i = 0;
+        for(Parameter params:parameters){
+            classes[i] = params.getType();
+            i++;
+        }
+        return classes;
+    }
+    private Class<?>[] parametersClass(Parameter[] parameters){
+        if(parameters.length==0) return null;
+        Class<?>[] classes = new Class[parameters.length];
+        int i = 0;
+        for (Parameter params:parameters){
+            classes[i] = params.getType();//mametraka anaty tableau ny class correspondant a chaque parametre
+            i++;
+        }
+        return classes;
     }
 
     @Override
