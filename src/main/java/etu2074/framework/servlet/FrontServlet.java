@@ -4,12 +4,15 @@ import etu2074.framework.controller.ModelView;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
 import etu2074.framework.url.Link;
+import etu2074.framework.upload.FileUpload;
+import etu2074.framework.utilities.Utilities;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
-import com.ovoc01.dao.utilities.Utilities;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -19,8 +22,11 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URISyntaxException;
 import java.util.*;
+import java.util.stream.Collectors;
 
-
+@MultipartConfig(fileSizeThreshold = 1024 * 1024 * 2, // 2MB
+        maxFileSize = 1024 * 1024 * 10, // 10MB
+        maxRequestSize = 1024 * 1024 * 50) // 50MB
 public class FrontServlet extends HttpServlet {
     private HttpServletRequest httpServletRequest;
     private HttpServletResponse httpServletResponse;
@@ -79,6 +85,8 @@ public class FrontServlet extends HttpServlet {
             }
         }
     }
+
+
     private void retrieveAllMappedMethod() throws URISyntaxException, ClassNotFoundException {
         Set<Class> classSet = null;
         classSet = Loader.findAllClasses("etu2074.framework.controller");
@@ -122,19 +130,82 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
-    private void instantiateObjectParameter(Map<String,String[]>requestParameter,Object object) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    private ModelView redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, ServletException, IOException {
+        Vector<String> links = retrieveRequestUrl(request);
+        Map<String,String[]> requestParameter = request.getParameterMap();
+        Collection<Part> parts = request.getParts();
+        if(!links.isEmpty()){
+            Mapping objectMapping = mappingUrl.get(links.get(0));
+            if(objectMapping!=null){
+                Object temp = objectMapping.getaClass().newInstance();
+                instantiateObjectParameter(requestParameter,temp,parts);
+                Method calledMethod = objectMapping.getMethod();
+                System.out.println(calledMethod);
+                //ModelView model_view= (ModelView) calledMethod.invoke(temp);
+                return invokeMethod(calledMethod,temp,requestParameter);
+            }
+        }
+        return null;
+    }
+
+    private ModelView invokeMethod(Method method,Object object,Map<String,String[]> requestParameter) throws InvocationTargetException, IllegalAccessException {
+        Vector<Parameter> parameters =  annotedMethodParameters(method);//maka ny parametre rehetra anle fonction
+        System.out.println(parameters);
+        if(!parameters.isEmpty()){
+            Class<?>[] parameterClasses = parametersClass(parameters);//maka ny class anle parametre
+            Object[] parameterValue = requestParamAttr(parameters,requestParameter);
+            return (ModelView) method.invoke(object,dynamicCast(parameterClasses,parameterValue));//
+        }else{
+            return (ModelView) method.invoke(object);
+        }
+    }
+
+    private void instantiateObjectParameter(Map<String,String[]>requestParameter,Object object,Collection<Part> partCollection) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, ServletException, IOException {
         Field[] fields = object.getClass().getDeclaredFields();//maka ny attribut rehetra declarer ao @ ilay objet
         Method[] methods = object.getClass().getDeclaredMethods();
         for (Field field:fields) {
             String [] parameter = requestParameter.get(field.getName());
-            if(parameter!=null){
+            if(parameter!=null && field.getType()!= FileUpload.class){
                 String setter = Utilities.createSetter(field.getName());
                 Method method_setter = stringMatchingMethod(methods,setter);
                 Class<?>[]method_parameter = arrayMethodParameter(method_setter);
                 method_setter.invoke(object,dynamicCast(method_parameter,parameter));
+            } else if (field.getType()== FileUpload.class) {
+                Part part = getMatchingPart(field.getName(),partCollection);
+                FileUpload fileUpload = instantiateFileUpload(part);
+                String setter = Utilities.createSetter(field.getName());
+                Method method_setter = stringMatchingMethod(methods,setter);
+                method_setter.invoke(object,fileUpload);
             }
         }
     }
+
+    private Part getMatchingPart(String partName,Collection<Part> partCollection){
+        return partCollection.stream().filter(part -> part.getName().equals(partName)).findFirst().orElse(null);
+    }
+    private FileUpload instantiateFileUpload(Part part) throws IOException {
+        return  new FileUpload(part.getSubmittedFileName(),part.getInputStream().readAllBytes(),null);
+    }
+
+   /* private void instantiateObjectParameter(Map<String, String[]> requestParameter, Object object) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        Field[] fields = object.getClass().getDeclaredFields();
+        Method[] methods = object.getClass().getDeclaredMethods();
+
+        Arrays.stream(fields)
+                .filter(field -> requestParameter.containsKey(field.getName()))
+                .forEach(field -> {
+                    String[] parameter = requestParameter.get(field.getName());
+                    String setter = Utilities.createSetter(field.getName());
+                    Method methodSetter = stringMatchingMethod(methods, setter);
+                    Class<?>[] methodParameter = arrayMethodParameter(methodSetter);
+                    try {
+                        methodSetter.invoke(object, dynamicCast(methodParameter, parameter));
+                    } catch (IllegalAccessException | InvocationTargetException e) {
+                        e.printStackTrace();
+                    }
+                });
+    }*/
+
 
     /**
      * function who dynamically cast an Object with the matching classes
@@ -153,6 +224,7 @@ public class FrontServlet extends HttpServlet {
         }
         return array;
     }
+
     private Method stringMatchingMethod(Method[] methods,String method_name){
         Method matchingMethod = null;
         for (Method method:methods) {
@@ -177,6 +249,8 @@ public class FrontServlet extends HttpServlet {
         // Return the array of parameter classes
         return paramClasses;
     }
+
+
     private void addDataToRequest(HashMap<String,Object>data)
     {
         for (Map.Entry<String,Object>value:data.entrySet()){
@@ -184,46 +258,10 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
-    private ModelView redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
-        Vector<String> links = retrieveRequestUrl(request);
-        Map<String,String[]> requestParameter = request.getParameterMap();
-        if(!links.isEmpty()){
-            Mapping objectMapping = mappingUrl.get(links.get(0));
-            if(objectMapping!=null){
-                Object temp = objectMapping.getaClass().newInstance();
-                instantiateObjectParameter(requestParameter,temp);
-                Method calledMethod = objectMapping.getMethod();
-                System.out.println(calledMethod);
-                //ModelView model_view= (ModelView) calledMethod.invoke(temp);
-                ModelView modelView = invokeMethod(calledMethod,temp,requestParameter);
-                return modelView;
-            }
-        }
-        return null;
-    }
-
-    private ModelView invokeMethod(Method method,Object object,Map<String,String[]> requestParameter) throws InvocationTargetException, IllegalAccessException {
-        Vector<Parameter> parameters =  annotedMethodParameters(method);//maka ny parametre rehetra anle fonction
-        ModelView modelView = (ModelView) method.invoke(object);
-        System.out.println(parameters);
-        if(!parameters.isEmpty()){
-            //  System.out.println("1");
-            Class<?>[] parameterClasses = parametersClass(parameters);//maka ny class anle parametre
-            //System.out.println("2");
-            Object[] parameterValue = requestParamAttr(parameters,requestParameter);
-            //System.out.println("3");
-            modelView = (ModelView) method.invoke(object,dynamicCast(parameterClasses,parameterValue));//
-            //System.out.println("4");
-            System.out.println(modelView);
-        }
-        return modelView;
-    }
-
     private Object[] requestParamAttr(Vector<Parameter> parameterVector,Map<String,String[]> requestParameter){
         Vector<Object> objectVector =  new Vector<>();
         for (Parameter params: parameterVector) {
-            String[] val = requestParameter.get(params.getAnnotation(RequestParameter.class).name());//maka an'ilay anle valeur anle
-            //System.out.println(val[0]);
+            String[] val = requestParameter.get(params.getName());//maka an'ilay anle valeur anle
             objectVector.add(val[0]);// atao anaty anilay Vector daoly na null na tsy null
         }
         return objectVector.toArray(new Object[0]);
@@ -234,7 +272,8 @@ public class FrontServlet extends HttpServlet {
     {
         Vector<Parameter> parameterVector = new Vector<>();
         for (Parameter params:method.getParameters()) {
-            if(params.isAnnotationPresent(RequestParameter.class)) parameterVector.add(params);//maka ny parametre rehetra ka annoté oueh @RequestParameter
+            //if(params.isAnnotationPresent(RequestParameter.class))
+            parameterVector.add(params);//maka ny parametre rehetra ka annoté oueh @RequestParameter
         }
         return  parameterVector;
     }
@@ -248,6 +287,16 @@ public class FrontServlet extends HttpServlet {
             i++;
         }
         return classes;
+    }
+
+    private Vector<Parameter> fileUpload(Vector<Parameter> parameters){
+        if(parameters.isEmpty()) return null;
+        int i = 0;
+        Vector<Parameter> fileUploadList = new Vector<>();
+        for (Parameter parameter: parameters) {
+            if(parameter.getType() == FileUpload.class) fileUploadList.add(parameter);
+        }
+        return fileUploadList;
     }
     private Class<?>[] parametersClass(Parameter[] parameters){
         if(parameters.length==0) return null;
