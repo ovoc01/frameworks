@@ -1,19 +1,14 @@
 package etu2074.framework.servlet;
-import etu2074.framework.url.RequestParameter;
-import etu2074.framework.url.Scope;
+import etu2074.framework.url.*;
 import etu2074.framework.controller.ModelView;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
-import etu2074.framework.url.Link;
 import etu2074.framework.upload.FileUpload;
 import etu2074.framework.utilities.Utilities;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.Part;
+import jakarta.servlet.http.*;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -143,7 +138,8 @@ public class FrontServlet extends HttpServlet {
             writer.println(list);
             ModelView modelView = redirection(request);
             if(modelView!=null){
-                if(!modelView.getData().isEmpty()) addDataToRequest(modelView.getData());
+                if(modelView.getData().size()>0) addDataToRequest(modelView.getData());
+                System.out.println(modelView.getView());
                 dispatch(modelView.getView());
             }
             //redirection(request);
@@ -152,10 +148,29 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
+    public boolean hasParts(HttpServletRequest request) {
+        // Check if the request is multipart
+        String contentType = request.getContentType();
+        if (contentType != null && contentType.startsWith("multipart/")) {
+            // Check if the request has any parts
+            try {
+                HttpServletRequestWrapper requestWrapper = (HttpServletRequestWrapper) request;
+                Part[] parts = requestWrapper.getParts().toArray(new Part[0]);
+                return parts.length > 0;
+            } catch (Exception e) {
+                // Handle any exceptions that may occur while retrieving parts
+                e.printStackTrace();
+            }
+        }
+        return false;
+    }
     private ModelView redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, ServletException, IOException {
         Vector<String> links = retrieveRequestUrl(request);
         Map<String,String[]> requestParameter = request.getParameterMap();
-        Collection<Part> parts = request.getParts();
+        Collection<Part> parts = null;
+        if(hasParts(request)) {
+            parts =request.getParts();
+        }
 
         if(!links.isEmpty()){
             Mapping objectMapping = mappingUrl.get(links.get(0));
@@ -180,7 +195,7 @@ public class FrontServlet extends HttpServlet {
                 controllerInstance.replace(mapping.getaClass().getName(),object);
                 return object;
             }
-            Utilities.resetObjectParameter(temp);
+            //Utilities.resetObjectParameter(temp);
             return temp;
         }
         return object;
@@ -209,7 +224,7 @@ public class FrontServlet extends HttpServlet {
                 Method method_setter = stringMatchingMethod(methods,setter);
                 Class<?>[]method_parameter = arrayMethodParameter(method_setter);
                 method_setter.invoke(object,dynamicCast(method_parameter,parameter));
-            } else if (field.getType()== FileUpload.class) {
+            } else if (partCollection!=null && field.getType()== FileUpload.class) {
                 Part part = getMatchingPart(field.getName(),partCollection);
                 FileUpload fileUpload = instantiateFileUpload(part);
                 String setter = Utilities.createSetter(field.getName());
@@ -293,6 +308,7 @@ public class FrontServlet extends HttpServlet {
     private void addDataToRequest(HashMap<String,Object>data)
     {
         for (Map.Entry<String,Object>value:data.entrySet()){
+            System.out.println(value.getKey()+" "+value.getValue());
             getHttpServletRequest().setAttribute(value.getKey(), value.getValue());
         }
     }
