@@ -1,5 +1,6 @@
 package etu2074.framework.servlet;
 import etu2074.framework.url.RequestParameter;
+import etu2074.framework.url.Scope;
 import etu2074.framework.controller.ModelView;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
@@ -22,7 +23,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URISyntaxException;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @MultipartConfig(fileSizeThreshold = 1024 * 1024 * 2, // 2MB
         maxFileSize = 1024 * 1024 * 10, // 10MB
@@ -31,10 +31,20 @@ public class FrontServlet extends HttpServlet {
     private HttpServletRequest httpServletRequest;
     private HttpServletResponse httpServletResponse;
     private HashMap<String, Mapping> mappingUrl;
+    private HashMap<String,Object> controllerInstance;
 
     public FrontServlet(){
 
     }
+
+    public HashMap<String, Object> getControllerInstance() {
+        return controllerInstance;
+    }
+
+    public void setControllerInstance(HashMap<String, Object> controllerInstance) {
+        this.controllerInstance = controllerInstance;
+    }
+
     public HashMap<String, Mapping> getMappingUrl() {
         return mappingUrl;
     }
@@ -65,12 +75,14 @@ public class FrontServlet extends HttpServlet {
             super.init(servletConfig);
             String path = getInitParameter("pathos");
             mappingUrl = new HashMap<>();
+            controllerInstance = new HashMap<>();
             retrieveAllMappedMethod(path);
-
+            addSingletonMap(path);
         }catch (Exception e){
             e.printStackTrace();
         }
     }
+
 
     private void retrieveAllMappedMethod(String paths) throws URISyntaxException, ClassNotFoundException {
         Set<Class> classSet = null;
@@ -82,6 +94,16 @@ public class FrontServlet extends HttpServlet {
                 if(link!=null){
                     mappingUrl.put(link.url(),new Mapping(classes.getName(),method,classes));
                 }
+            }
+        }
+    }
+
+    private void addSingletonMap(String path) throws URISyntaxException, ClassNotFoundException {
+        Set<Class> classSet = null;
+        classSet = Loader.findAllClasses(path);
+        for (Class c: classSet) {
+            if(c.isAnnotationPresent(Scope.class)){
+                controllerInstance.put(c.getName(),null);
             }
         }
     }
@@ -134,10 +156,11 @@ public class FrontServlet extends HttpServlet {
         Vector<String> links = retrieveRequestUrl(request);
         Map<String,String[]> requestParameter = request.getParameterMap();
         Collection<Part> parts = request.getParts();
+
         if(!links.isEmpty()){
             Mapping objectMapping = mappingUrl.get(links.get(0));
             if(objectMapping!=null){
-                Object temp = objectMapping.getaClass().newInstance();
+                Object temp = instanceToCall(objectMapping);
                 instantiateObjectParameter(requestParameter,temp,parts);
                 Method calledMethod = objectMapping.getMethod();
                 System.out.println(calledMethod);
@@ -147,6 +170,22 @@ public class FrontServlet extends HttpServlet {
         }
         return null;
     }
+
+    private Object instanceToCall(Mapping mapping) throws IllegalAccessException, InstantiationException {
+        Object object =mapping.getaClass().newInstance();
+        if(mapping.getaClass().isAnnotationPresent(Scope.class)){
+            Object temp = controllerInstance.get(mapping.getaClass().getName());
+            if(temp==null){
+                object = mapping.getaClass().newInstance();
+                controllerInstance.replace(mapping.getaClass().getName(),object);
+                return object;
+            }
+            Utilities.resetObjectParameter(temp);
+            return temp;
+        }
+        return object;
+    }
+
 
     private ModelView invokeMethod(Method method,Object object,Map<String,String[]> requestParameter) throws InvocationTargetException, IllegalAccessException {
         Vector<Parameter> parameters =  annotedMethodParameters(method);//maka ny parametre rehetra anle fonction
