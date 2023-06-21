@@ -7,12 +7,22 @@ public class ModelView {
     private HashMap<String,Object> data = new HashMap<>();
     private String method= "";
     private HashMap<String,Object> sessions =new HashMap<>();
+
+    private boolean isJson ;
     public ModelView(String view){
         setView(view);
     }
 
     public ModelView(){
 
+    }
+
+    public boolean isJson() {
+        return isJson;
+    }
+
+    public void setJson(boolean json) {
+        isJson = json;
     }
 
     public HashMap<String, Object> getSessions() {

@@ -1,7 +1,7 @@
 package etu2074.framework.servlet;
 
+import com.google.gson.Gson;
 import etu2074.framework.url.*;
-
 import etu2074.framework.controller.ModelView;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
@@ -162,10 +162,7 @@ public class FrontServlet extends HttpServlet {
             //writer.println(list);
             ModelView modelView = redirection(request);
             if(modelView!=null){
-                if(modelView.getData().size()>0) addDataToRequest(modelView.getData());
-                if(modelView.getSessions().size()>0) addDataToSession(modelView.getSessions());
-                System.out.println(modelView.getView());
-                dispatch(modelView.getView());
+                dispatch(modelView,response);
             }
             //redirection(request);
         }catch (Exception e){
@@ -173,6 +170,29 @@ public class FrontServlet extends HttpServlet {
             response.getWriter().println(e);
         }
     }
+
+    private void dispatch(ModelView modelView,HttpServletResponse response) throws IOException {
+        System.out.println(modelView.getView());
+        if(!modelView.isJson()) dispatchNormal(modelView);
+        else dispatchRestAPI(modelView,response);
+    }
+
+    private void dispatchRestAPI(ModelView modelView,HttpServletResponse response) throws IOException {
+        Gson gson = new Gson();
+        String json =  gson.toJson(modelView.getData());
+        System.out.println(json);
+        response.getWriter().println(json);
+    }
+
+
+
+    private void dispatchNormal(ModelView modelView){
+        if(modelView.getData().size()>0) addDataToRequest(modelView.getData());
+        if(modelView.getSessions().size()>0) addDataToSession(modelView.getSessions());
+        dispatch(modelView.getView());
+    }
+
+
 
     private void addDataToSession(HashMap<String, Object> sessions) {
         HttpSession httpSession = getHttpServletRequest().getSession();
