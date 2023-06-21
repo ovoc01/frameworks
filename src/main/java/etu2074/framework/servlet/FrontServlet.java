@@ -1,15 +1,17 @@
 package etu2074.framework.servlet;
-import etu2074.framework.url.*;
+
+import etu2074.framework.url.Authentification;
+import etu2074.framework.url.Scope;
 import etu2074.framework.controller.ModelView;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
+import etu2074.framework.url.Link;
 import etu2074.framework.upload.FileUpload;
 import etu2074.framework.utilities.Utilities;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.*;
-
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
@@ -27,9 +29,27 @@ public class FrontServlet extends HttpServlet {
     private HttpServletResponse httpServletResponse;
     private HashMap<String, Mapping> mappingUrl;
     private HashMap<String,Object> controllerInstance;
+    private String sessionId;
+    private String profileName;
 
     public FrontServlet(){
 
+    }
+
+    public String getProfileName() {
+        return profileName;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setProfileName(String profileName) {
+        this.profileName = profileName;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     public HashMap<String, Object> getControllerInstance() {
@@ -68,7 +88,11 @@ public class FrontServlet extends HttpServlet {
     public void init(ServletConfig servletConfig) throws ServletException {
         try{
             super.init(servletConfig);
+
             String path = getInitParameter("pathos");
+            setProfileName(getInitParameter("profile_name"));
+            setSessionId(getInitParameter("session_name"));
+
             mappingUrl = new HashMap<>();
             controllerInstance = new HashMap<>();
             retrieveAllMappedMethod(path);
@@ -117,6 +141,7 @@ public class FrontServlet extends HttpServlet {
             }
         }
     }
+
     public final void dispatch(String URL) {
         try {
             getHttpServletRequest().getRequestDispatcher(URL).forward(getHttpServletRequest(),getHttpServletResponse());
@@ -133,20 +158,31 @@ public class FrontServlet extends HttpServlet {
             System.out.println("===>url"+retrieveRequestUrl(request));
             String values = request.getRequestURI();
             writer.println(values);
-            writer.println("<br>");
             HashMap<String,Mapping> list = getMappingUrl();
-            writer.println(list);
+
+            //writer.println(list);
             ModelView modelView = redirection(request);
             if(modelView!=null){
                 if(modelView.getData().size()>0) addDataToRequest(modelView.getData());
+                if(modelView.getSessions().size()>0) addDataToSession(modelView.getSessions());
                 System.out.println(modelView.getView());
                 dispatch(modelView.getView());
             }
             //redirection(request);
         }catch (Exception e){
             e.printStackTrace();
+            response.getWriter().println(e);
         }
     }
+
+    private void addDataToSession(HashMap<String, Object> sessions) {
+        HttpSession httpSession = getHttpServletRequest().getSession();
+        for (Map.Entry<String,Object>value:sessions.entrySet()){
+            System.out.println(value.getKey()+" "+value.getValue());
+            httpSession.setAttribute(value.getKey(), value.getValue());
+        }
+    }
+
 
     public boolean hasParts(HttpServletRequest request) {
         // Check if the request is multipart
@@ -164,6 +200,7 @@ public class FrontServlet extends HttpServlet {
         }
         return false;
     }
+
     private ModelView redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, ServletException, IOException {
         Vector<String> links = retrieveRequestUrl(request);
         Map<String,String[]> requestParameter = request.getParameterMap();
@@ -179,8 +216,9 @@ public class FrontServlet extends HttpServlet {
                 instantiateObjectParameter(requestParameter,temp,parts);
                 Method calledMethod = objectMapping.getMethod();
                 System.out.println(calledMethod);
+                // System.out.println(request.getSession());
                 //ModelView model_view= (ModelView) calledMethod.invoke(temp);
-                return invokeMethod(calledMethod,temp,requestParameter);
+                return invokeMethod(calledMethod,temp,requestParameter,request.getSession());
             }
         }
         return null;
@@ -202,9 +240,10 @@ public class FrontServlet extends HttpServlet {
     }
 
 
-    private ModelView invokeMethod(Method method,Object object,Map<String,String[]> requestParameter) throws InvocationTargetException, IllegalAccessException {
+    private ModelView invokeMethod(Method method,Object object,Map<String,String[]> requestParameter,HttpSession session) throws InvocationTargetException, IllegalAccessException {
         Vector<Parameter> parameters =  annotedMethodParameters(method);//maka ny parametre rehetra anle fonction
         System.out.println(parameters);
+        methodAuthentification(method,session);
         if(!parameters.isEmpty()){
             Class<?>[] parameterClasses = parametersClass(parameters);//maka ny class anle parametre
             Object[] parameterValue = requestParamAttr(parameters,requestParameter);
@@ -212,6 +251,20 @@ public class FrontServlet extends HttpServlet {
         }else{
             return (ModelView) method.invoke(object);
         }
+    }
+
+    private void methodAuthentification(Method method,HttpSession session)throws RuntimeException{
+        Authentification authentification = method.getAnnotation(Authentification.class);
+        if(authentification==null) return;
+        System.out.println(session.getAttribute(getProfileName()));
+        if(session.getAttribute(getProfileName())!=authentification.auth()) throw new RuntimeException("Authentification failed");
+    }
+
+    private void checkSessionPresence(HttpSession session){
+
+    }
+    private String  listProfileNeeded(Authentification authentification){
+        return authentification.auth();
     }
 
     private void instantiateObjectParameter(Map<String,String[]>requestParameter,Object object,Collection<Part> partCollection) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, ServletException, IOException {
@@ -222,13 +275,14 @@ public class FrontServlet extends HttpServlet {
             if(parameter!=null && field.getType()!= FileUpload.class){
                 String setter = Utilities.createSetter(field.getName());
                 Method method_setter = stringMatchingMethod(methods,setter);
-                Class<?>[]method_parameter = arrayMethodParameter(method_setter);
+                Class<?>[]method_parameter = arrayMethodParameter(Objects.requireNonNull(method_setter));
                 method_setter.invoke(object,dynamicCast(method_parameter,parameter));
             } else if (partCollection!=null && field.getType()== FileUpload.class) {
                 Part part = getMatchingPart(field.getName(),partCollection);
                 FileUpload fileUpload = instantiateFileUpload(part);
                 String setter = Utilities.createSetter(field.getName());
                 Method method_setter = stringMatchingMethod(methods,setter);
+                assert method_setter != null;
                 method_setter.invoke(object,fileUpload);
             }
         }
@@ -394,10 +448,5 @@ public class FrontServlet extends HttpServlet {
             ur+=url;
         }
         return ur;
-    }
-
-    public static void main(String[] args) {
-        //Set<Class>classSet = Loader.findAllClasses("etu2074.framework.controller");
-        //System.out.println(classSet);
     }
 }
