@@ -1,11 +1,10 @@
 package etu2074.framework.servlet;
 
-import etu2074.framework.url.Authentification;
-import etu2074.framework.url.Scope;
+import etu2074.framework.url.*;
+
 import etu2074.framework.controller.ModelView;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
-import etu2074.framework.url.Link;
 import etu2074.framework.upload.FileUpload;
 import etu2074.framework.utilities.Utilities;
 import jakarta.servlet.ServletConfig;
@@ -244,6 +243,7 @@ public class FrontServlet extends HttpServlet {
         Vector<Parameter> parameters =  annotedMethodParameters(method);//maka ny parametre rehetra anle fonction
         System.out.println(parameters);
         methodAuthentification(method,session);
+        checkIfSessionIsNeed(object,method,session);
         if(!parameters.isEmpty()){
             Class<?>[] parameterClasses = parametersClass(parameters);//maka ny class anle parametre
             Object[] parameterValue = requestParamAttr(parameters,requestParameter);
@@ -253,10 +253,36 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
+    private void checkIfSessionIsNeed(Object object,Method method,HttpSession httpSession) throws IllegalAccessException {
+        if(!method.isAnnotationPresent(Session.class)) return;
+        setSessionInObject(object,httpSession);
+    }
+
+    private void setSessionInObject(Object object,HttpSession httpSession) throws RuntimeException, IllegalAccessException {
+        Field session = getSessionFieldInObject(object);
+        if(session==null)throw new RuntimeException("To access Session with @Session annotation you should create an HashMap<String,Object> called session");
+        sessionSessionInObject(object,session,httpSession);
+    }
+
+    private final Field getSessionFieldInObject(Object object){
+        return  Arrays.stream(object.getClass().getDeclaredFields()).filter(field ->field.getName().equals("session")).findFirst().orElse(null);
+    }
+
+    private final void sessionSessionInObject(Object object , Field field,HttpSession httpSession ) throws IllegalAccessException {
+        Enumeration<String> stringEnumeration =  httpSession.getAttributeNames();
+        HashMap<String,Object> sessionObject = new HashMap<>();
+        while(stringEnumeration.hasMoreElements()){
+            String key = stringEnumeration.nextElement();
+            sessionObject.put("key",httpSession.getAttribute(key));
+        }
+        field.setAccessible(true);
+        field.set(object,sessionObject);
+    }
+
+
     private void methodAuthentification(Method method,HttpSession session)throws RuntimeException{
         Authentification authentification = method.getAnnotation(Authentification.class);
         if(authentification==null) return;
-        System.out.println(session.getAttribute(getProfileName()));
         if(session.getAttribute(getProfileName())!=authentification.auth()) throw new RuntimeException("Authentification failed");
     }
 
