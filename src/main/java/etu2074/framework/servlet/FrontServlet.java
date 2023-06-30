@@ -21,6 +21,7 @@ import java.lang.reflect.Parameter;
 import java.net.URISyntaxException;
 import java.util.*;
 
+
 @MultipartConfig(fileSizeThreshold = 1024 * 1024 * 2, // 2MB
         maxFileSize = 1024 * 1024 * 10, // 10MB
         maxRequestSize = 1024 * 1024 * 50) // 50MB
@@ -92,7 +93,7 @@ public class FrontServlet extends HttpServlet {
             String path = getInitParameter("pathos");
             setProfileName(getInitParameter("profile_name"));
             setSessionId(getInitParameter("session_name"));
-
+            System.out.println("ito ilay"+getProfileName());
             mappingUrl = new HashMap<>();
             controllerInstance = new HashMap<>();
             retrieveAllMappedMethod(path);
@@ -198,12 +199,22 @@ public class FrontServlet extends HttpServlet {
 
 
     private void dispatchNormal(ModelView modelView){
-        if(modelView.getData().size()>0) addDataToRequest(modelView.getData());
-        if(modelView.getSessions().size()>0) addDataToSession(modelView.getSessions());
+        if(modelView.getData().size()>0) addDataToRequest(modelView.getData()); //manampy attribut ao anatin'ilay httpServletRequest avy any @ ilay data ao anaty modelView
+        if(modelView.getSessions().size()>0) addDataToSession(modelView.getSessions()); //manampy session ao anatin'ilay HttpSession avy any @ ilay session anaty modelView
+        if(modelView.getRemoveSession().size()>0) removeSpecificSession((modelView.getRemoveSession())); // manala session iray na maro maro precis ao anatin'ilay HttpSession
+        if(modelView.isInvalidateSession()) destroySession(); //mamono ny session rehetra
         dispatch(modelView.getView());
     }
 
+    private void removeSpecificSession(LinkedList<String> removeSession) {
+        for (String attName:removeSession) {
+            httpServletRequest.getSession().removeAttribute(attName);
+        }
+    }
 
+    private void destroySession(){
+        httpServletRequest.getSession().invalidate();
+    }
 
     private void addDataToSession(HashMap<String, Object> sessions) {
         HttpSession httpSession = getHttpServletRequest().getSession();
@@ -241,6 +252,7 @@ public class FrontServlet extends HttpServlet {
 
         if(!links.isEmpty()){
             Mapping objectMapping = mappingUrl.get(links.get(0));
+            System.out.println(links.get(0));
             if(objectMapping!=null){
                 Object temp = instanceToCall(objectMapping);
                 instantiateObjectParameter(requestParameter,temp,parts);
@@ -315,9 +327,7 @@ public class FrontServlet extends HttpServlet {
     private void methodAuthentification(Method method,HttpSession session)throws RuntimeException{
         Authentification authentification = method.getAnnotation(Authentification.class);
         if(authentification==null) return;
-        System.out.println(session.getAttribute(getProfileName()));
-        System.out.println(authentification.auth());
-        if(!session.getAttribute(getProfileName()).equals(authentification.auth())) throw new RuntimeException("Authentification failed");
+        if(session.getAttribute(getProfileName())==null||!session.getAttribute(getProfileName()).equals(authentification.auth())) throw new RuntimeException("Authentification failed");
     }
 
     private void checkSessionPresence(HttpSession session){

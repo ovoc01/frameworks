@@ -38,4 +38,11 @@ public class Yes {
         Employe employe = new Employe();
         return new Employe();
     }
+
+    @Link(url="logout.do")
+    public ModelView logout(){
+        ModelView modelView =new ModelView("index.jsp");
+        modelView.getRemoveSession().add("profile");
+        return modelView;
+    }
 }

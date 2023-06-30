@@ -1,6 +1,7 @@
 package etu2074.framework.controller;
 
 import java.util.HashMap;
+import java.util.LinkedList;
 
 public class ModelView {
     String view;
@@ -9,12 +10,30 @@ public class ModelView {
     private HashMap<String,Object> sessions =new HashMap<>();
 
     private boolean isJson ;
+    private boolean invalidateSession=false;
+    private LinkedList<String> removeSession= new LinkedList<>();
     public ModelView(String view){
         setView(view);
     }
 
     public ModelView(){
 
+    }
+
+    public boolean isInvalidateSession() {
+        return invalidateSession;
+    }
+
+    public void setInvalidateSession(boolean invalidateSession) {
+        this.invalidateSession = invalidateSession;
+    }
+
+    public LinkedList<String> getRemoveSession() {
+        return removeSession;
+    }
+
+    public void setRemoveSession(LinkedList<String> removeSession) {
+        this.removeSession = removeSession;
     }
 
     public boolean isJson() {
