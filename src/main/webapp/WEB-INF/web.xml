@@ -6,13 +6,29 @@
     <servlet>
         <servlet-name>frontServlet</servlet-name>
         <servlet-class>etu2074.framework.servlet.FrontServlet</servlet-class>
+
         <init-param>
             <param-name>pathos</param-name>
-            <param-value>etu2074.framework.controller</param-value>
+            <param-value>testFramework</param-value>
         </init-param>
+
+        <init-param>
+            <param-name>session_name</param-name>
+            <param-value>isConnected</param-value>
+        </init-param>
+
+        <init-param>
+            <param-name>profile_name</param-name>
+            <param-value>profile</param-value>
+        </init-param>
+
     </servlet>
     <servlet-mapping>
         <servlet-name>frontServlet</servlet-name>
+        <url-pattern>*.do</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
         <url-pattern>/</url-pattern>
     </servlet-mapping>
 </web-app>

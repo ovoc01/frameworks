@@ -1,19 +1,17 @@
 package etu2074.framework.servlet;
-import etu2074.framework.url.RequestParameter;
+
+import com.google.gson.Gson;
+import etu2074.framework.url.*;
+
 import etu2074.framework.controller.ModelView;
 import etu2074.framework.loader.Loader;
 import etu2074.framework.mapping.Mapping;
-import etu2074.framework.url.Link;
 import etu2074.framework.upload.FileUpload;
 import etu2074.framework.utilities.Utilities;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.Part;
-
+import jakarta.servlet.http.*;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
@@ -22,7 +20,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URISyntaxException;
 import java.util.*;
-import java.util.stream.Collectors;
+
 
 @MultipartConfig(fileSizeThreshold = 1024 * 1024 * 2, // 2MB
         maxFileSize = 1024 * 1024 * 10, // 10MB
@@ -31,10 +29,38 @@ public class FrontServlet extends HttpServlet {
     private HttpServletRequest httpServletRequest;
     private HttpServletResponse httpServletResponse;
     private HashMap<String, Mapping> mappingUrl;
+    private HashMap<String,Object> controllerInstance;
+    private String sessionId;
+    private String profileName;
 
     public FrontServlet(){
 
     }
+
+    public String getProfileName() {
+        return profileName;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setProfileName(String profileName) {
+        this.profileName = profileName;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public HashMap<String, Object> getControllerInstance() {
+        return controllerInstance;
+    }
+
+    public void setControllerInstance(HashMap<String, Object> controllerInstance) {
+        this.controllerInstance = controllerInstance;
+    }
+
     public HashMap<String, Mapping> getMappingUrl() {
         return mappingUrl;
     }
@@ -63,14 +89,20 @@ public class FrontServlet extends HttpServlet {
     public void init(ServletConfig servletConfig) throws ServletException {
         try{
             super.init(servletConfig);
-            String path = getInitParameter("pathos");
-            mappingUrl = new HashMap<>();
-            retrieveAllMappedMethod(path);
 
+            String path = getInitParameter("pathos");
+            setProfileName(getInitParameter("profile_name"));
+            setSessionId(getInitParameter("session_name"));
+            System.out.println("ito ilay"+getProfileName());
+            mappingUrl = new HashMap<>();
+            controllerInstance = new HashMap<>();
+            retrieveAllMappedMethod(path);
+            addSingletonMap(path);
         }catch (Exception e){
             e.printStackTrace();
         }
     }
+
 
     private void retrieveAllMappedMethod(String paths) throws URISyntaxException, ClassNotFoundException {
         Set<Class> classSet = null;
@@ -82,6 +114,16 @@ public class FrontServlet extends HttpServlet {
                 if(link!=null){
                     mappingUrl.put(link.url(),new Mapping(classes.getName(),method,classes));
                 }
+            }
+        }
+    }
+
+    private void addSingletonMap(String path) throws URISyntaxException, ClassNotFoundException {
+        Set<Class> classSet = null;
+        classSet = Loader.findAllClasses(path);
+        for (Class c: classSet) {
+            if(c.isAnnotationPresent(Scope.class)){
+                controllerInstance.put(c.getName(),null);
             }
         }
     }
@@ -100,6 +142,7 @@ public class FrontServlet extends HttpServlet {
             }
         }
     }
+
     public final void dispatch(String URL) {
         try {
             getHttpServletRequest().getRequestDispatcher(URL).forward(getHttpServletRequest(),getHttpServletResponse());
@@ -115,49 +158,183 @@ public class FrontServlet extends HttpServlet {
         try{
             System.out.println("===>url"+retrieveRequestUrl(request));
             String values = request.getRequestURI();
-            writer.println(values);
-            writer.println("<br>");
             HashMap<String,Mapping> list = getMappingUrl();
-            writer.println(list);
-            ModelView modelView = redirection(request);
-            if(modelView!=null){
-                if(!modelView.getData().isEmpty()) addDataToRequest(modelView.getData());
-                dispatch(modelView.getView());
-            }
-            //redirection(request);
+
+            Object requestResponse =  redirection(request);
+            if(requestResponse!=null)dispatch(requestResponse,response);
         }catch (Exception e){
             e.printStackTrace();
+            response.getWriter().println(e);
         }
     }
 
-    private ModelView redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, ServletException, IOException {
+    private void dispatch(Object object,HttpServletResponse response) throws IOException {
+        if(object instanceof ModelView){
+            dispatch((ModelView) object,response);
+        }
+        else {
+            toJson(object,response);
+        }
+    }
+
+    private void dispatch(ModelView modelView,HttpServletResponse response) throws IOException {
+        System.out.println(modelView.getView());
+        if(!modelView.isJson()) dispatchNormal(modelView);
+        else dispatchRestAPI(modelView,response);
+    }
+
+    private void toJson(Object object,HttpServletResponse response) throws IOException{
+        Gson gson = new Gson();
+        String jSon = gson.toJson(object);
+        System.out.println(jSon);
+        response.getWriter().println(jSon);
+    }
+    private void dispatchRestAPI(ModelView modelView,HttpServletResponse response) throws IOException {
+        Gson gson = new Gson();
+        String json =  gson.toJson(modelView.getData());
+        System.out.println(json);
+        response.getWriter().println(json);
+    }
+
+
+
+    private void dispatchNormal(ModelView modelView){
+        if(modelView.getData().size()>0) addDataToRequest(modelView.getData()); //manampy attribut ao anatin'ilay httpServletRequest avy any @ ilay data ao anaty modelView
+        if(modelView.getSessions().size()>0) addDataToSession(modelView.getSessions()); //manampy session ao anatin'ilay HttpSession avy any @ ilay session anaty modelView
+        if(modelView.getRemoveSession().size()>0) removeSpecificSession((modelView.getRemoveSession())); // manala session iray na maro maro precis ao anatin'ilay HttpSession
+        if(modelView.isInvalidateSession()) destroySession(); //mamono ny session rehetra
+        dispatch(modelView.getView());
+    }
+
+    private void removeSpecificSession(LinkedList<String> removeSession) {
+        for (String attName:removeSession) {
+            httpServletRequest.getSession().removeAttribute(attName);
+        }
+    }
+
+    private void destroySession(){
+        httpServletRequest.getSession().invalidate();
+    }
+
+    private void addDataToSession(HashMap<String, Object> sessions) {
+        HttpSession httpSession = getHttpServletRequest().getSession();
+        for (Map.Entry<String,Object>value:sessions.entrySet()){
+            System.out.println(value.getKey()+" "+value.getValue());
+            httpSession.setAttribute(value.getKey(), value.getValue());
+        }
+    }
+
+
+    public boolean hasParts(HttpServletRequest request) {
+        // Check if the request is multipart
+        String contentType = request.getContentType();
+        if (contentType != null && contentType.startsWith("multipart/")) {
+            // Check if the request has any parts
+            try {
+                HttpServletRequestWrapper requestWrapper = (HttpServletRequestWrapper) request;
+                Part[] parts = requestWrapper.getParts().toArray(new Part[0]);
+                return parts.length > 0;
+            } catch (Exception e) {
+                // Handle any exceptions that may occur while retrieving parts
+                e.printStackTrace();
+            }
+        }
+        return false;
+    }
+
+    private Object redirection(HttpServletRequest request) throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, ServletException, IOException {
         Vector<String> links = retrieveRequestUrl(request);
         Map<String,String[]> requestParameter = request.getParameterMap();
-        Collection<Part> parts = request.getParts();
+        Collection<Part> parts = null;
+        if(hasParts(request)) {
+            parts =request.getParts();
+        }
+
         if(!links.isEmpty()){
             Mapping objectMapping = mappingUrl.get(links.get(0));
+            System.out.println(links.get(0));
             if(objectMapping!=null){
-                Object temp = objectMapping.getaClass().newInstance();
+                Object temp = instanceToCall(objectMapping);
                 instantiateObjectParameter(requestParameter,temp,parts);
                 Method calledMethod = objectMapping.getMethod();
                 System.out.println(calledMethod);
-                //ModelView model_view= (ModelView) calledMethod.invoke(temp);
-                return invokeMethod(calledMethod,temp,requestParameter);
+                return invokeMethod(calledMethod,temp,requestParameter,request.getSession());
             }
         }
         return null;
     }
 
-    private ModelView invokeMethod(Method method,Object object,Map<String,String[]> requestParameter) throws InvocationTargetException, IllegalAccessException {
+
+
+
+    private Object instanceToCall(Mapping mapping) throws IllegalAccessException, InstantiationException {
+        Object object =mapping.getaClass().newInstance();
+        if(mapping.getaClass().isAnnotationPresent(Scope.class)){
+            Object temp = controllerInstance.get(mapping.getaClass().getName());
+            if(temp==null){
+                object = mapping.getaClass().newInstance();
+                controllerInstance.replace(mapping.getaClass().getName(),object);
+                return object;
+            }
+            //Utilities.resetObjectParameter(temp);
+            return temp;
+        }
+        return object;
+    }
+
+
+    private Object invokeMethod(Method method,Object object,Map<String,String[]> requestParameter,HttpSession session) throws InvocationTargetException, IllegalAccessException {
         Vector<Parameter> parameters =  annotedMethodParameters(method);//maka ny parametre rehetra anle fonction
         System.out.println(parameters);
+        methodAuthentification(method,session); //mi-verifier hoe mety ilay authentification
+        checkIfSessionIsNeeded(object,method,session);//mi-verifier hoe mila session ve ilay fonction
         if(!parameters.isEmpty()){
             Class<?>[] parameterClasses = parametersClass(parameters);//maka ny class anle parametre
             Object[] parameterValue = requestParamAttr(parameters,requestParameter);
-            return (ModelView) method.invoke(object,dynamicCast(parameterClasses,parameterValue));//
+            return method.invoke(object,dynamicCast(parameterClasses,parameterValue));//
         }else{
-            return (ModelView) method.invoke(object);
+            return  method.invoke(object);
         }
+    }
+
+    private void checkIfSessionIsNeeded(Object object,Method method,HttpSession httpSession) throws IllegalAccessException {
+        if(!method.isAnnotationPresent(Session.class)) return;
+        setSessionInObject(object,httpSession);
+    }
+
+    private void setSessionInObject(Object object,HttpSession httpSession) throws RuntimeException, IllegalAccessException {
+        Field session = getSessionFieldInObject(object);
+        if(session==null)throw new RuntimeException("To access Session with @Session annotation you should create an HashMap<String,Object> called session");
+        sessionSessionInObject(object,session,httpSession);
+    }
+
+    private final Field getSessionFieldInObject(Object object){
+        return  Arrays.stream(object.getClass().getDeclaredFields()).filter(field ->field.getName().equals("session")).findFirst().orElse(null);
+    }
+
+    private final void sessionSessionInObject(Object object , Field field,HttpSession httpSession ) throws IllegalAccessException {
+        Enumeration<String> stringEnumeration =  httpSession.getAttributeNames();
+        HashMap<String,Object> sessionObject = new HashMap<>();
+        while(stringEnumeration.hasMoreElements()){
+            String key = stringEnumeration.nextElement();
+            sessionObject.put("key",httpSession.getAttribute(key));
+        }
+        field.setAccessible(true);
+        field.set(object,sessionObject);
+    }
+
+
+    private void methodAuthentification(Method method,HttpSession session)throws RuntimeException{
+        Authentification authentification = method.getAnnotation(Authentification.class);
+        if(authentification==null) return;
+        if(session.getAttribute(getProfileName())==null||!session.getAttribute(getProfileName()).equals(authentification.auth())) throw new RuntimeException("Authentification failed");
+    }
+
+    private void checkSessionPresence(HttpSession session){
+
+    }
+    private String  listProfileNeeded(Authentification authentification){
+        return authentification.auth();
     }
 
     private void instantiateObjectParameter(Map<String,String[]>requestParameter,Object object,Collection<Part> partCollection) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, ServletException, IOException {
@@ -168,13 +345,14 @@ public class FrontServlet extends HttpServlet {
             if(parameter!=null && field.getType()!= FileUpload.class){
                 String setter = Utilities.createSetter(field.getName());
                 Method method_setter = stringMatchingMethod(methods,setter);
-                Class<?>[]method_parameter = arrayMethodParameter(method_setter);
+                Class<?>[]method_parameter = arrayMethodParameter(Objects.requireNonNull(method_setter));
                 method_setter.invoke(object,dynamicCast(method_parameter,parameter));
-            } else if (field.getType()== FileUpload.class) {
+            } else if (partCollection!=null && field.getType()== FileUpload.class) {
                 Part part = getMatchingPart(field.getName(),partCollection);
                 FileUpload fileUpload = instantiateFileUpload(part);
                 String setter = Utilities.createSetter(field.getName());
                 Method method_setter = stringMatchingMethod(methods,setter);
+                assert method_setter != null;
                 method_setter.invoke(object,fileUpload);
             }
         }
@@ -186,25 +364,6 @@ public class FrontServlet extends HttpServlet {
     private FileUpload instantiateFileUpload(Part part) throws IOException {
         return  new FileUpload(part.getSubmittedFileName(),part.getInputStream().readAllBytes(),null);
     }
-
-   /* private void instantiateObjectParameter(Map<String, String[]> requestParameter, Object object) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        Field[] fields = object.getClass().getDeclaredFields();
-        Method[] methods = object.getClass().getDeclaredMethods();
-
-        Arrays.stream(fields)
-                .filter(field -> requestParameter.containsKey(field.getName()))
-                .forEach(field -> {
-                    String[] parameter = requestParameter.get(field.getName());
-                    String setter = Utilities.createSetter(field.getName());
-                    Method methodSetter = stringMatchingMethod(methods, setter);
-                    Class<?>[] methodParameter = arrayMethodParameter(methodSetter);
-                    try {
-                        methodSetter.invoke(object, dynamicCast(methodParameter, parameter));
-                    } catch (IllegalAccessException | InvocationTargetException e) {
-                        e.printStackTrace();
-                    }
-                });
-    }*/
 
 
     /**
@@ -254,6 +413,7 @@ public class FrontServlet extends HttpServlet {
     private void addDataToRequest(HashMap<String,Object>data)
     {
         for (Map.Entry<String,Object>value:data.entrySet()){
+            System.out.println(value.getKey()+" "+value.getValue());
             getHttpServletRequest().setAttribute(value.getKey(), value.getValue());
         }
     }
@@ -339,10 +499,5 @@ public class FrontServlet extends HttpServlet {
             ur+=url;
         }
         return ur;
-    }
-
-    public static void main(String[] args) {
-        //Set<Class>classSet = Loader.findAllClasses("etu2074.framework.controller");
-        //System.out.println(classSet);
     }
 }

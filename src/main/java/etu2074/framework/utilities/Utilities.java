@@ -1,5 +1,7 @@
 package etu2074.framework.utilities;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Parameter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,5 +24,13 @@ public  class Utilities {
     public static String capitalizeFirstLetter(String input) {
         String var10000 = input.substring(0, 1).toUpperCase();
         return var10000 + input.substring(1);
+    }
+
+    public static void resetObjectParameter(Object object) throws IllegalAccessException {
+        Field[] fields =  object.getClass().getDeclaredFields();
+        for (Field field:fields) {
+            field.setAccessible(true);
+            field.set(object,null);
+        }
     }
 }
